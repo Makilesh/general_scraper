@@ -469,8 +469,21 @@ def scrape_single_page(url, driver=None):
         
         if contact_info.get('email'):
             print(f"  ✓ AI found email: {contact_info['email']}")
+        if contact_info.get('phone'):
+            print(f"  ✓ AI found phone: {contact_info['phone']}")
         
-        # If no email found, try contact pages
+        # If AI didn't find anything, try traditional extraction on homepage
+        if not contact_info.get('email') or not contact_info.get('phone'):
+            print(f"  Trying traditional extraction on homepage...")
+            traditional = extract_contact_info_from_website(page_source, soup)
+            if traditional.get('email') and not contact_info.get('email'):
+                contact_info['email'] = traditional['email']
+                print(f"  ✓ Traditional found email: {traditional['email']}")
+            if traditional.get('phone') and not contact_info.get('phone'):
+                contact_info['phone'] = traditional['phone']
+                print(f"  ✓ Traditional found phone: {traditional['phone']}")
+        
+        # If still no email found, try contact pages
         if not contact_info.get('email'):
             print(f"  No email on homepage, checking contact pages...")
             contact_pages = find_contact_pages(soup, url)
@@ -478,26 +491,44 @@ def scrape_single_page(url, driver=None):
             if contact_pages:
                 print(f"  Found {len(contact_pages)} potential contact pages")
             
-            for idx, contact_url in enumerate(contact_pages[:2], 1):
+            for idx, contact_url in enumerate(contact_pages[:5], 1):
                 try:
                     print(f"    [{idx}] Checking: {contact_url}")
                     driver.get(contact_url)
                     time.sleep(2)
                     
+                    # Scroll to load all content
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    time.sleep(1)
+                    
                     contact_page_source = driver.page_source
+                    contact_soup = BeautifulSoup(contact_page_source, 'lxml')
                     
                     # Use AI on contact page
                     contact_ai_result = extract_contacts_with_ai(contact_page_source, page_title_text)
                     
                     if contact_ai_result.get('email'):
                         contact_info['email'] = contact_ai_result['email']
-                        print(f"    ✓ AI found email on contact page: {contact_ai_result['email']}")
-                        break
-                    else:
-                        print(f"    ✗ No email found on this page")
+                        print(f"    ✓ AI found email: {contact_ai_result['email']}")
                     
-                    if contact_ai_result.get('phone') and not contact_info.get('phone'):
+                    if contact_ai_result.get('phone'):
                         contact_info['phone'] = contact_ai_result['phone']
+                        print(f"    ✓ AI found phone: {contact_ai_result['phone']}")
+                    
+                    # If AI didn't find anything, try traditional extraction as fallback
+                    if not contact_info.get('email') or not contact_info.get('phone'):
+                        traditional = extract_contact_info_from_website(contact_page_source, contact_soup)
+                        if traditional.get('email') and not contact_info.get('email'):
+                            contact_info['email'] = traditional['email']
+                            print(f"    ✓ Traditional method found email: {traditional['email']}")
+                        if traditional.get('phone') and not contact_info.get('phone'):
+                            contact_info['phone'] = traditional['phone']
+                            print(f"    ✓ Traditional method found phone: {traditional['phone']}")
+                    
+                    # Stop if we found both
+                    if contact_info.get('email') and contact_info.get('phone'):
+                        break
+                        
                 except Exception as e:
                     print(f"    Error checking contact page: {e}")
                     continue
@@ -691,6 +722,9 @@ def extract_contact_info_from_website(page_source, soup=None):
                 r'(\+91[-\s]?)?[6-9]\d{9}',  # Indian mobile
                 r'\+91[-.\s]?\d{10}',  # With country code
                 r'[6-9]\d{2}[-.\s]?\d{3}[-.\s]?\d{4}',  # With separators
+                r'\(\d{3}\)[-.\s]?\d{3}[-.\s]?\d{4}',  # US format
+                r'\d{5}[-\s]?\d{5}',  # 10 digits with separator
+                r'whatsapp[:\s]+([+\d\s-]+)',  # WhatsApp numbers
             ]
             
             for pattern in phone_patterns:

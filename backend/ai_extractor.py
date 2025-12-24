@@ -28,34 +28,42 @@ def extract_contacts_with_ai(page_content, business_name=None, max_retries=2):
         dict: Extracted contact information with validation
     """
     try:
-        # Truncate content to avoid token limits (keep first 8000 chars)
-        truncated_content = page_content[:8000] if len(page_content) > 8000 else page_content
+        # Truncate content to avoid token limits (keep first 12000 chars for better coverage)
+        truncated_content = page_content[:12000] if len(page_content) > 12000 else page_content
         
-        prompt = f"""You are a professional data extraction specialist. Extract the business contact information from the following webpage content.
+        prompt = f"""You are an expert data extraction specialist. Your task is to THOROUGHLY search and extract ALL contact information from this webpage.
 
 Business Name: {business_name or 'Unknown'}
 
 Webpage Content:
 {truncated_content}
 
-Extract and return ONLY the following information in valid JSON format:
+INSTRUCTIONS:
+1. Search EVERYWHERE in the content: header, footer, contact sections, about pages, sidebars
+2. Look for emails in: mailto: links, plain text, contact forms, footer text, meta tags
+3. Look for phones in: href="tel:", plain text with format +XX, (XXX) XXX-XXXX, or similar
+4. Check for obfuscated contacts like: email [at] domain [dot] com
+5. Look for WhatsApp numbers, mobile numbers, landline numbers
+6. If you see "Contact us" or "Email:" or "Phone:" labels, extract what follows
+
+Extract and return in valid JSON format:
 {{
-    "email": "valid business email or null",
-    "phone": "valid phone number or null",
-    "business_name": "actual business name from page or null",
+    "email": "best business email found or null",
+    "phone": "best phone number found or null",
+    "business_name": "actual business name or null",
     "is_restaurant": true/false
 }}
 
-Rules:
-- email: Must be a valid business email (not support@, noreply@, or placeholder emails)
-- phone: Must be a complete phone number with country code or area code
-- business_name: Extract the actual business/restaurant name from the page
-- is_restaurant: true only if this is clearly a restaurant/cafe/food business website
-- Return null for any field if not found or uncertain
-- Do NOT return emails like info@example.com, test@test.com, or any placeholder
-- Do NOT return generic Google, Facebook, or social media emails
+RULES:
+- email: Return ANY valid business email found (info@, contact@, etc. are acceptable)
+- phone: Return ANY valid phone number (with country/area code preferred)
+- business_name: Extract from title, h1, or prominent text
+- is_restaurant: true if restaurant/cafe/food business
+- Return null ONLY if genuinely not found after thorough search
+- IGNORE: noreply@, support@wordpress.com, webmaster@, admin@
+- IGNORE: Generic template emails like info@example.com, test@test.com
 
-Return ONLY valid JSON, no additional text."""
+Return ONLY valid JSON, no markdown or extra text."""
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
