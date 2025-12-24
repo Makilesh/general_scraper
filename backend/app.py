@@ -33,7 +33,6 @@ def create_app():
     @app.route('/api/search-google', methods=['GET', 'POST'])
     def search_google():
         return route_search_google()
-
     @app.route('/api/status', methods=['GET'])
     def status():
         return route_status()
